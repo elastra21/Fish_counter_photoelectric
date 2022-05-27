@@ -1,9 +1,11 @@
-
+// #include <WiFi.h>
 #include "config.h"
+#include "secrets.h"
+#include <WiFiMulti.h>
 #include <GxEPD2_BW.h> // including both doesn't use more code or ram
 #include <GxEPD2_3C.h> // including both doesn't use more code or ram
+#include "MqttClient.h"
 #include <U8g2_for_Adafruit_GFX.h>
-
 
 #if TEST
   GxEPD2_BW<GxEPD2_270, GxEPD2_270::HEIGHT> display(GxEPD2_270(/*CS=5*/ SS, /*DC=*/ 17, /*RST=*/ 16, /*BUSY=*/ 4)); // GDEW027W3, Waveshare 2.7"
@@ -11,10 +13,14 @@
   GxEPD2_BW<GxEPD2_290_T94_V2, GxEPD2_290_T94_V2::HEIGHT> display(GxEPD2_290_T94_V2(/*CS=5*/ SS, /*DC=*/ 17, /*RST=*/ 16, /*BUSY=*/ 4)); // GDEM029T94, Waveshare 2.9" V2 variant
 #endif
 
+MqttClient mqtt;
+TaskHandle_t Task1;
 U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
 
+void setUpWiFi();
 void updateText();
 void updateProm();
+void Task1code( void * pvParameters );
 
 ////////////////////////////////
 volatile unsigned long fishCounter = 0;
@@ -25,7 +31,6 @@ volatile unsigned long endTime = 0.0;
 volatile unsigned long duration = 1;
 volatile unsigned long next_reset = 0;
 
-
 unsigned int time_buffer[BUFFER_SIZE] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 boolean full_buffer = false;
 uint8_t buffer_position = 0;
@@ -33,9 +38,10 @@ boolean jammed = false;
 unsigned long jam_countdown = 0;
 unsigned long next_avg_reset = 0;
 
+
 ////////////////////////////////
 
-void IRAM_ATTR handleInterrupt(){
+void IRAM_ATTR handleInterrupt() {
   isUp = !isUp;
   if (isUp) {
     if (startTime > 0) {
@@ -51,11 +57,23 @@ void IRAM_ATTR handleInterrupt(){
 
 void setup(){
   Serial.begin(115200);
+  // setUpWiFi();
+  // mqtt.connect();
   pinMode(ALARM_PIN, OUTPUT);
   initScreen();
   drawLabels();
   attachInterrupt(SENSOR_PIN, handleInterrupt, CHANGE);
   setNextReset();
+  xTaskCreatePinnedToCore(Task1code, "Task1", 10000,  NULL, 1, &Task1, CORE0);
+}
+
+void Task1code( void * pvParameters ){
+  setUpWiFi();
+  mqtt.connect();
+  for(;;){
+    mqtt.loop();
+    delay(100);
+  }
 }
 
 void loop(){
@@ -125,6 +143,8 @@ void updateProm(){
   const uint8_t buffer_lenght = full_buffer ? BUFFER_SIZE : buffer_position;
   const float avg = sum > 1 ? (buffer_lenght * 60000)/ sum : 0;
   display.setPartialWindow(X_STATUS, 70, 200, 120);
+  const String msg = "{\"count\":"+String(fishCounter)+", \"fpm\":"+String(avg)+"}";
+  mqtt.sendTagData(msg.c_str());
   updateText(X_STATUS + L_PADDING, Y_PROM, String(avg < 1000 ? avg: 0).c_str());
 } // ---------------------------------------------------> MOVE TO SCREEN CLASS
 
@@ -173,4 +193,13 @@ void isJamed(){
     updateText(X_STATUS + L_PADDING, Y_PROM, "JAMMED");
     u8g2Fonts.setFont(u8g2_font_fub30_tr);   //font is set
   }
+}
+
+void setUpWiFi(){
+  WiFi.begin(SECRET_SSID, SECRET_PASS);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(200);
+    Serial.print(".");
+  }
+  Serial.println("WiFi connected IP: ");
 }

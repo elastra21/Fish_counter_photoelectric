@@ -5,7 +5,7 @@
 #define JAMMED_TIME 5
 
 // ---------------------------> Code flags
-#define TEST false // <---------------------------> Change this to false for 2.9" screen
+#define TEST true // <---------------------------> Change this to false for 2.9" screen
 #define SENSOR_PIN 13
 #define ALARM_PIN 14
 #define BUFFER_SIZE 15
