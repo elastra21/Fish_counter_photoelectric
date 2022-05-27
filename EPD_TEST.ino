@@ -14,6 +14,7 @@
 U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
 
 void updateText();
+void updateProm();
 
 ////////////////////////////////
 volatile unsigned long fishCounter = 0;
@@ -31,8 +32,6 @@ uint8_t buffer_position = 0;
 boolean jammed = false;
 unsigned long jam_countdown = 0;
 unsigned long next_avg_reset = 0;
-
-void updateProm();
 
 ////////////////////////////////
 
@@ -73,7 +72,6 @@ void loop(){
 // ================================= TODO MOVE SCREEN STUFF TO ANOTHER CLASS =================================
 
 void initScreen(){
-
      display.init();
      display.setTextColor(GxEPD_BLACK);
      display.firstPage();
