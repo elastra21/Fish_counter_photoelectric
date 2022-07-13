@@ -5,6 +5,7 @@
 
 class MqttClient {
   public:
+    bool isServiceAvailable();
     void connect();
     void reconnect();
     boolean isConnected();
@@ -13,5 +14,6 @@ class MqttClient {
     PubSubClient getRef();
     void setCallback(std::function<void (char *, uint8_t *, unsigned int)> callback);
   private:
+    bool no_service_available = true;
 };
 #endif

@@ -3,6 +3,7 @@
 #define RESET_TIME 7200
 #define SECS 1000
 #define JAMMED_TIME 5
+#define WIFI_TIMEOUT 5000
 
 // ---------------------------> Code flags
 #define TEST true // <---------------------------> Change this to false for 2.9" screen

@@ -21,6 +21,7 @@ void setUpWiFi();
 void updateText();
 void updateProm();
 void Task1code( void * pvParameters );
+void sendToMQTT(String count, String avg);
 
 ////////////////////////////////
 volatile unsigned long fishCounter = 0;
@@ -37,7 +38,6 @@ uint8_t buffer_position = 0;
 boolean jammed = false;
 unsigned long jam_countdown = 0;
 unsigned long next_avg_reset = 0;
-
 
 ////////////////////////////////
 
@@ -57,8 +57,8 @@ void IRAM_ATTR handleInterrupt() {
 
 void setup(){
   Serial.begin(115200);
-  // setUpWiFi();
-  // mqtt.connect();
+//   setUpWiFi();
+//   mqtt.connect();
   pinMode(ALARM_PIN, OUTPUT);
   initScreen();
   drawLabels();
@@ -71,7 +71,7 @@ void Task1code( void * pvParameters ){
   setUpWiFi();
   mqtt.connect();
   for(;;){
-    mqtt.loop();
+    if(mqtt.isServiceAvailable()) mqtt.loop();
     delay(100);
   }
 }
@@ -143,9 +143,8 @@ void updateProm(){
   const uint8_t buffer_lenght = full_buffer ? BUFFER_SIZE : buffer_position;
   const float avg = sum > 1 ? (buffer_lenght * 60000)/ sum : 0;
   display.setPartialWindow(X_STATUS, 70, 200, 120);
-  const String msg = "{\"count\":"+String(fishCounter)+", \"fpm\":"+String(avg)+"}";
-  mqtt.sendTagData(msg.c_str());
   updateText(X_STATUS + L_PADDING, Y_PROM, String(avg < 1000 ? avg: 0).c_str());
+  sendToMQTT(String(fishCounter),String(avg));
 } // ---------------------------------------------------> MOVE TO SCREEN CLASS
 
 void updateText(const uint16_t x, const uint16_t y, const char *text){
@@ -159,6 +158,13 @@ void updateText(const uint16_t x, const uint16_t y, const char *text){
 
 void setNextReset(){
   next_reset = RESET_TIME * SECS + millis();
+}
+
+void sendToMQTT(String count, String avg){
+  if (WL_CONNECTED && mqtt.isServiceAvailable()){
+    const String msg = "{\"count\":"+count+", \"fpm\":"+avg+"}";
+    mqtt.sendTagData(msg.c_str());
+  }
 }
 
 void reset_values(){
@@ -182,6 +188,7 @@ void resetAvg(){
   buffer_position = 0;
   display.setPartialWindow(X_STATUS, 70, 200, 120);
   updateText(X_STATUS + L_PADDING, Y_PROM, "0");
+  sendToMQTT(String(fishCounter),"0");
 }
 
 void isJamed(){
@@ -191,15 +198,17 @@ void isJamed(){
     u8g2Fonts.setFont(u8g2_font_fub20_tr);   //font is set
     display.setPartialWindow(X_STATUS, 70, 200, 120);
     updateText(X_STATUS + L_PADDING, Y_PROM, "JAMMED");
+    sendToMQTT(String(fishCounter),"-1");
     u8g2Fonts.setFont(u8g2_font_fub30_tr);   //font is set
   }
 }
 
 void setUpWiFi(){
   WiFi.begin(SECRET_SSID, SECRET_PASS);
-  while (WiFi.status() != WL_CONNECTED) {
+  const unsigned long wifi_timeout = millis() + WIFI_TIMEOUT;
+  while (WiFi.status() != WL_CONNECTED && wifi_timeout > millis()) {
     delay(200);
     Serial.print(".");
   }
-  Serial.println("WiFi connected IP: ");
+  // Serial.println("WiFi connected IP: ");
 }

@@ -8,13 +8,18 @@ PubSubClient mqttClient(esp32Client);
 
 void MqttClient::connect(){
   mqttClient.setServer(IP, PORT);
-  if (mqttClient.connect("myClientID")) {
+  if (mqttClient.connect("myClientID","admin","midna")) {
     Serial.println("Connection has been established, well done");
     // mqttClient.subscribe(DATA_TOPIC);
+     no_service_available = false;
   }
   else {
     Serial.println("Looks like the server connection failed...");
   }
+}
+
+bool MqttClient::isServiceAvailable(){
+  return !no_service_available;
 }
 
 void MqttClient::reconnect(){
@@ -64,6 +69,7 @@ void MqttClient::setCallback(std::function<void (char *, uint8_t *, unsigned int
 // }
 //
 void MqttClient::sendTagData(const char* id){
+  if (no_service_available) return;
   if(mqttClient.publish(DATA_TOPIC, id)){
     Serial.println("Publish message success");
   }
