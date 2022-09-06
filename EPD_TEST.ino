@@ -1,55 +1,50 @@
-// #include <WiFi.h>
+#include "WIFI.h"
+#include "Screen.h"
 #include "config.h"
 #include "secrets.h"
 #include <WiFiMulti.h>
-#include <GxEPD2_BW.h> // including both doesn't use more code or ram
-#include <GxEPD2_3C.h> // including both doesn't use more code or ram
 #include "MqttClient.h"
-#include <U8g2_for_Adafruit_GFX.h>
 
-#if TEST
-  GxEPD2_BW<GxEPD2_270, GxEPD2_270::HEIGHT> display(GxEPD2_270(/*CS=5*/ SS, /*DC=*/ 17, /*RST=*/ 16, /*BUSY=*/ 4)); // GDEW027W3, Waveshare 2.7"
-#else
-  GxEPD2_BW<GxEPD2_290_T94_V2, GxEPD2_290_T94_V2::HEIGHT> display(GxEPD2_290_T94_V2(/*CS=5*/ SS, /*DC=*/ 17, /*RST=*/ 16, /*BUSY=*/ 4)); // GDEM029T94, Waveshare 2.9" V2 variant
-#endif
-
+WIFI wifi;
+Screen screen;
 MqttClient mqtt;
 TaskHandle_t Task1;
-U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
 
-void setUpWiFi();
-void updateText();
+void isJamed();
+void resetAvg();
 void updateProm();
-void Task1code( void * pvParameters );
+void setNextReset();
+void resetValues();
+void resetJamTime();
+void backgroundTasks( void * pvParameters );
 void sendToMQTT(String count, String avg);
+void updateText(const uint16_t x, const uint16_t y, const char *text);
 
 ////////////////////////////////
-volatile unsigned long fishCounter = 0;
-volatile boolean should_update_count = false;
-volatile boolean isUp = false;
-volatile unsigned long startTime = 0.0;
-volatile unsigned long endTime = 0.0;
-volatile unsigned long duration = 1;
-volatile unsigned long next_reset = 0;
-
-unsigned int time_buffer[BUFFER_SIZE] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-boolean full_buffer = false;
+bool jammed = false;
+bool full_buffer = false;
+volatile bool is_up = false;
 uint8_t buffer_position = 0;
-boolean jammed = false;
 unsigned long jam_countdown = 0;
 unsigned long next_avg_reset = 0;
-
+volatile unsigned long duration = 1;
+volatile unsigned long end_time = 0;
+volatile unsigned long next_reset = 0;
+volatile unsigned long start_time = 0;
+volatile unsigned long fish_counter = 0;
+volatile bool should_update_count = false;
+unsigned int time_buffer[BUFFER_SIZE] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 ////////////////////////////////
 
 void IRAM_ATTR handleInterrupt() {
-  isUp = !isUp;
-  if (isUp) {
-    if (startTime > 0) {
-      endTime = millis();
-      duration = (endTime - startTime);
+  is_up = !is_up;
+  if (is_up) {
+    if (start_time > 0) {
+      end_time = millis();
+      duration = (end_time - start_time);
     }
-    fishCounter++;
-    startTime = millis();
+    fish_counter++;
+    start_time = millis();
     should_update_count = true;
     setNextReset();
   }
@@ -57,78 +52,43 @@ void IRAM_ATTR handleInterrupt() {
 
 void setup(){
   Serial.begin(115200);
-//   setUpWiFi();
-//   mqtt.connect();
   pinMode(ALARM_PIN, OUTPUT);
-  initScreen();
-  drawLabels();
+  screen.init();
+  screen.drawLabels();
   attachInterrupt(SENSOR_PIN, handleInterrupt, CHANGE);
   setNextReset();
-  xTaskCreatePinnedToCore(Task1code, "Task1", 10000,  NULL, 1, &Task1, CORE0);
+  xTaskCreatePinnedToCore(backgroundTasks, "Task1", 10000,  NULL, 1, &Task1, CORE0);
 }
 
-void Task1code( void * pvParameters ){
-  setUpWiFi();
+void backgroundTasks( void * pvParameters ){
+  wifi.setUpWiFi();
+  wifi.setUpOTA();
   mqtt.connect();
   for(;;){
+    if (WL_CONNECTED) wifi.loopOTA();
     if(mqtt.isServiceAvailable()) mqtt.loop();
     delay(100);
   }
 }
 
-void loop(){
-  if (should_update_count) updateCount(fishCounter);
+void loop(){  
+  if (should_update_count) updateCount(fish_counter);
 
   if (next_avg_reset < millis()) resetAvg();
 
-  if (next_reset < millis()) reset_values();
+  if (next_reset < millis()) resetValues();
 
   if (jam_countdown != 0 && jam_countdown < millis())
     if (digitalRead(SENSOR_PIN)== LOW) isJamed();
 }
 
-// ================================= TODO MOVE SCREEN STUFF TO ANOTHER CLASS =================================
-
-void initScreen(){
-     display.init();
-     display.setTextColor(GxEPD_BLACK);
-     display.firstPage();
-     display.setRotation(1);
-     u8g2Fonts.begin(display);
-     delay(1000);
-     u8g2Fonts.setForegroundColor(GxEPD_BLACK);
-     u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
-}
-// --------------------------------------------------------> MOVE TO SCREEN CLASS
-
-void drawLabels(){
-
-     do{
-       display.fillScreen(GxEPD_WHITE);
-       u8g2Fonts.setFont(u8g2_font_fub30_tr);   //font is set
-       u8g2Fonts.setCursor(X_LABELS, Y_COUNT);             //cursor(x,y)
-       u8g2Fonts.print("Count: ");   //print the text
-       u8g2Fonts.setCursor(X_LABELS, Y_PROM);             //cursor(x,y)
-       u8g2Fonts.print("FPM: ");   //print the text
-       u8g2Fonts.setCursor(X_STATUS + L_PADDING, Y_COUNT);
-       u8g2Fonts.print(0);
-       u8g2Fonts.setCursor(X_STATUS + L_PADDING, Y_PROM);
-       u8g2Fonts.print(0);
-     }while (display.nextPage());
-}    // --------------------------------------------------------> MOVE TO SCREEN CLASS
-
 void updateCount(const unsigned int value){
   resetJamTime();
   jam_countdown = JAMMED_TIME * SECS + millis();
   should_update_count = false;
-  display.setPartialWindow(X_STATUS, 0, 200, 70);
-  updateText(X_STATUS + L_PADDING, Y_COUNT, String(value).c_str());
-  if (duration > 0 ) {
-    // const float promedio = 60000/duration;
-    // updateProm(promedio < 1000 ? promedio: 0);
-    updateProm();
-    next_avg_reset = AVG_RESET_TIME * SECS + millis();
-  }
+  screen.updateCount(value);
+  updateProm();
+  next_avg_reset = AVG_RESET_TIME * SECS + millis();
 } // ----------------------------------> MOVE TO SCREEN CLASS
 
 void updateProm(){
@@ -138,23 +98,12 @@ void updateProm(){
   if (!full_buffer && position_reset) full_buffer = true;
   buffer_position = position_reset ? 0 : buffer_position + 1;
   unsigned int sum = 0;
-  for ( int i = 0; i < BUFFER_SIZE; i++ )
-    sum += time_buffer[ i ];
+  for ( int i = 0; i < BUFFER_SIZE; i++ ) sum += time_buffer[ i ];
   const uint8_t buffer_lenght = full_buffer ? BUFFER_SIZE : buffer_position;
   const float avg = sum > 1 ? (buffer_lenght * 60000)/ sum : 0;
-  display.setPartialWindow(X_STATUS, 70, 200, 120);
-  updateText(X_STATUS + L_PADDING, Y_PROM, String(avg < 1000 ? avg: 0).c_str());
-  sendToMQTT(String(fishCounter),String(avg));
-} // ---------------------------------------------------> MOVE TO SCREEN CLASS
-
-void updateText(const uint16_t x, const uint16_t y, const char *text){
-    display.firstPage();
-    do{
-      display.fillScreen(GxEPD_WHITE);
-      u8g2Fonts.setCursor(x, y);
-      u8g2Fonts.print(text);
-    }while(display.nextPage());
-} // --------> MOVE TO SCREEN CLASS
+  screen.updateProm(avg);
+  sendToMQTT(String(fish_counter),String(avg));
+} 
 
 void setNextReset(){
   next_reset = RESET_TIME * SECS + millis();
@@ -167,9 +116,9 @@ void sendToMQTT(String count, String avg){
   }
 }
 
-void reset_values(){
-  // fishCounter = 0;
-  // resetAvg();
+void resetValues(){
+  fish_counter = 0;
+  resetAvg();
 }
 
 void resetJamTime(){
@@ -183,32 +132,17 @@ void resetJamTime(){
 void resetAvg(){
   if (jammed) return;
   full_buffer = false;
-  for (size_t i = 0; i < BUFFER_SIZE; i++)
-    time_buffer[i] = 0;
+  for (size_t i = 0; i < BUFFER_SIZE; i++) time_buffer[i] = 0;
   buffer_position = 0;
-  display.setPartialWindow(X_STATUS, 70, 200, 120);
-  updateText(X_STATUS + L_PADDING, Y_PROM, "0");
-  sendToMQTT(String(fishCounter),"0");
+  screen.resetAvg();
+  sendToMQTT(String(fish_counter),"0");
 }
 
 void isJamed(){
   if (!jammed) {
     jammed = true;
     digitalWrite(ALARM_PIN, HIGH);
-    u8g2Fonts.setFont(u8g2_font_fub20_tr);   //font is set
-    display.setPartialWindow(X_STATUS, 70, 200, 120);
-    updateText(X_STATUS + L_PADDING, Y_PROM, "JAMMED");
-    sendToMQTT(String(fishCounter),"-1");
-    u8g2Fonts.setFont(u8g2_font_fub30_tr);   //font is set
+    screen.printJam();
+    sendToMQTT(String(fish_counter),"-1");
   }
-}
-
-void setUpWiFi(){
-  WiFi.begin(SECRET_SSID, SECRET_PASS);
-  const unsigned long wifi_timeout = millis() + WIFI_TIMEOUT;
-  while (WiFi.status() != WL_CONNECTED && wifi_timeout > millis()) {
-    delay(200);
-    Serial.print(".");
-  }
-  // Serial.println("WiFi connected IP: ");
 }

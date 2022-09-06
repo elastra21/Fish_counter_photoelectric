@@ -7,7 +7,7 @@ PubSubClient mqttClient(esp32Client);
 // void subscribeReceive(char* topic, byte* payload, unsigned int length);
 
 void MqttClient::connect(){
-  mqttClient.setServer(IP, PORT);
+  mqttClient.setServer(IP_ADDRESS, PORT);
   if (mqttClient.connect("myClientID","admin","midna")) {
     Serial.println("Connection has been established, well done");
     // mqttClient.subscribe(DATA_TOPIC);
