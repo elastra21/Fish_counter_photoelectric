@@ -16,8 +16,8 @@ void updateProm();
 void setNextReset();
 void resetValues();
 void resetJamTime();
-void backgroundTasks( void * pvParameters );
 void sendToMQTT(String count, String avg);
+void backgroundTasks( void * pvParameters );
 void updateText(const uint16_t x, const uint16_t y, const char *text);
 
 ////////////////////////////////
@@ -51,13 +51,15 @@ void IRAM_ATTR handleInterrupt() {
 }
 
 void setup(){
+  M5.begin();
   Serial.begin(115200);
   pinMode(ALARM_PIN, OUTPUT);
   screen.init();
   screen.drawLabels();
+  screen.updateCount(0);
   attachInterrupt(SENSOR_PIN, handleInterrupt, CHANGE);
   setNextReset();
-  xTaskCreatePinnedToCore(backgroundTasks, "Task1", 10000,  NULL, 1, &Task1, CORE0);
+  // xTaskCreatePinnedToCore(backgroundTasks, "Task1", 10000,  NULL, 1, &Task1, CORE0);
 }
 
 void backgroundTasks( void * pvParameters ){
@@ -79,7 +81,7 @@ void loop(){
   if (next_reset < millis()) resetValues();
 
   if (jam_countdown != 0 && jam_countdown < millis())
-    if (digitalRead(SENSOR_PIN)== LOW) isJamed();
+    if (digitalRead(SENSOR_PIN)== HIGH) isJamed();
 }
 
 void updateCount(const unsigned int value){

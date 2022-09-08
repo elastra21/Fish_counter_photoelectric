@@ -12,10 +12,10 @@
 #define BUFFER_SIZE 15
 
 // ---------------------------> E-Paper variables
-#define Y_COUNT 40
+#define Y_COUNT 10
 #define Y_PROM 110
-#define L_PADDING 13
-#define X_STATUS 150
+#define L_PADDING 50
+#define X_STATUS 20
 
 #if TEST
   #define X_LABELS 10
