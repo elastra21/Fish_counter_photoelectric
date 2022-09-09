@@ -59,7 +59,7 @@ void setup(){
   screen.updateCount(0);
   attachInterrupt(SENSOR_PIN, handleInterrupt, CHANGE);
   setNextReset();
-  // xTaskCreatePinnedToCore(backgroundTasks, "Task1", 10000,  NULL, 1, &Task1, CORE0);
+  xTaskCreatePinnedToCore(backgroundTasks, "Task1", 10000,  NULL, 1, &Task1, CORE0);
 }
 
 void backgroundTasks( void * pvParameters ){
