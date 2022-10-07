@@ -5,7 +5,7 @@
 #include <WiFiUdp.h>
 #include <WiFiMulti.h>
 #include "MqttClient.h"
-#include <NTPClient_Generic.h>
+#include <NTPClient_Generic.h> // Sí
 
 WIFI wifi;
 Screen screen;
