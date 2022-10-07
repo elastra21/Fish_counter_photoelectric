@@ -10,7 +10,7 @@ void MqttClient::connect(){
   mqttClient.setServer(IP_ADDRESS, PORT);
   if (mqttClient.connect("myClientID","admin","midna")) {
     Serial.println("Connection has been established, well done");
-    // mqttClient.subscribe(DATA_TOPIC);
+    // subscribeRoutine();
      no_service_available = false;
   }
   else {
@@ -39,7 +39,7 @@ void MqttClient::reconnect(){
    }
 }
 
-boolean MqttClient::isConnected(){
+bool MqttClient::isConnected(){
   return mqttClient.connected();
 }
 
@@ -47,6 +47,7 @@ void MqttClient::loop(){
   if (!mqttClient.connected()) {
     reconnect();
   }
+  delay(100);
   mqttClient.loop();
 }
 
@@ -70,12 +71,25 @@ void MqttClient::setCallback(std::function<void (char *, uint8_t *, unsigned int
 //
 void MqttClient::sendTagData(const char* id){
   if (no_service_available) return;
-  if(mqttClient.publish(DATA_TOPIC, id)){
+  if (mqttClient.publish(DATA_TOPIC, id)){
     Serial.println("Publish message success");
   }
   else{
     Serial.println("Could not send message :(");
     reconnect();
-    mqttClient.publish(DATA_TOPIC, id);
+    // mqttClient.publish(DATA_TOPIC, id);
   }
+}
+
+ bool MqttClient::refreshMQTTStatus(){
+  const bool connection = isConnected();
+  if (connection != last_connection_state){
+    last_connection_state = connection;
+    return true;
+  }
+  return false;
+ }
+
+ bool MqttClient::getConnectionStatus(){
+  return last_connection_state;
 }

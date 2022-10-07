@@ -10,6 +10,8 @@ class Screen {
     void resetAvg();
     void drawLabels();
     void updateProm(float avg);
+    void MQTTState(bool connected = false);
+    void WiFiState(bool connected = false);
     void updateCount(const unsigned int value);
   private:
 };

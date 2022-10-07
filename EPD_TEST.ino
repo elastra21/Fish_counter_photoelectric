@@ -2,19 +2,26 @@
 #include "Screen.h"
 #include "config.h"
 #include "secrets.h"
+#include <WiFiUdp.h>
 #include <WiFiMulti.h>
 #include "MqttClient.h"
+#include <NTPClient_Generic.h>
 
 WIFI wifi;
 Screen screen;
+WiFiUDP ntpUDP;
 MqttClient mqtt;
 TaskHandle_t Task1;
+NTPClient timeClient(ntpUDP);
+RTC_DateTypeDef RTC_DateStruct; // Data
+RTC_TimeTypeDef RTC_TimeStruct; // Time
 
 void isJamed();
+void setUpRTC();
 void resetAvg();
 void updateProm();
-void setNextReset();
 void resetValues();
+void setNextReset();
 void resetJamTime();
 void sendToMQTT(String count, String avg);
 void backgroundTasks( void * pvParameters );
@@ -22,6 +29,7 @@ void updateText(const uint16_t x, const uint16_t y, const char *text);
 
 ////////////////////////////////
 bool jammed = false;
+char timeStrbuff[64];
 bool full_buffer = false;
 volatile bool is_up = false;
 uint8_t buffer_position = 0;
@@ -53,10 +61,13 @@ void IRAM_ATTR handleInterrupt() {
 void setup(){
   M5.begin();
   Serial.begin(115200);
+
   pinMode(ALARM_PIN, OUTPUT);
+  
   screen.init();
   screen.drawLabels();
   screen.updateCount(0);
+
   attachInterrupt(SENSOR_PIN, handleInterrupt, CHANGE);
   setNextReset();
   xTaskCreatePinnedToCore(backgroundTasks, "Task1", 10000,  NULL, 1, &Task1, CORE0);
@@ -64,21 +75,29 @@ void setup(){
 
 void backgroundTasks( void * pvParameters ){
   wifi.setUpWiFi();
+  if(wifi.isConnected()) setUpRTC();
   wifi.setUpOTA();
   mqtt.connect();
   for(;;){
-    if (WL_CONNECTED) wifi.loopOTA();
-    if(mqtt.isServiceAvailable()) mqtt.loop();
-    delay(100);
+    wifi.isConnected() ? wifi.loopOTA(): wifi.reconnect();
+    if (mqtt.isServiceAvailable())  mqtt.loop();
   }
 }
 
-void loop(){  
-  if (should_update_count) updateCount(fish_counter);
+void loop(){ 
+  M5.Rtc.GetTime(&RTC_TimeStruct);
 
-  if (next_avg_reset < millis()) resetAvg();
+  if (wifi.refreshWiFiStatus())   screen.WiFiState(wifi.getConnectionStatus());
+  
+  if (mqtt.refreshMQTTStatus())   screen.MQTTState(mqtt.getConnectionStatus());
 
-  if (next_reset < millis()) resetValues();
+  if (RTC_TimeStruct.Hours == RESET_HOUR) resetValues();
+  
+  if (should_update_count)        updateCount(fish_counter);
+
+  if (next_avg_reset < millis())  resetAvg();
+
+  // if (next_reset < millis())      resetValues();
 
   if (jam_countdown != 0 && jam_countdown < millis())
     if (digitalRead(SENSOR_PIN)== HIGH) isJamed();
@@ -112,7 +131,7 @@ void setNextReset(){
 }
 
 void sendToMQTT(String count, String avg){
-  if (WL_CONNECTED && mqtt.isServiceAvailable()){
+  if (wifi.isConnected() && mqtt.isConnected()){
     const String msg = "{\"count\":"+count+", \"fpm\":"+avg+"}";
     mqtt.sendTagData(msg.c_str());
   }
@@ -137,6 +156,7 @@ void resetAvg(){
   for (size_t i = 0; i < BUFFER_SIZE; i++) time_buffer[i] = 0;
   buffer_position = 0;
   screen.resetAvg();
+  next_avg_reset = AVG_RESET_TIME * SECS + millis();
   sendToMQTT(String(fish_counter),"0");
 }
 
@@ -147,4 +167,23 @@ void isJamed(){
     screen.printJam();
     sendToMQTT(String(fish_counter),"-1");
   }
+}
+
+void setUpRTC(){
+  timeClient.begin();
+  timeClient.setTimeOffset(3600 * TIME_ZONE_OFFSET_HRS);
+  timeClient.setUpdateInterval(SECS_IN_HR);
+  timeClient.update();
+  while (!timeClient.updated()){
+    timeClient.update();
+    delay(500);
+  }
+  RTC_DateStruct.Year     = timeClient.getYear();
+  RTC_DateStruct.Month    = timeClient.getMonth();
+  RTC_DateStruct.Date     = timeClient.getDay();
+  M5.Rtc.SetDate(&RTC_DateStruct);
+  RTC_TimeStruct.Hours    = timeClient.getHours();
+  RTC_TimeStruct.Minutes  = timeClient.getMinutes();
+  RTC_TimeStruct.Seconds  = timeClient.getSeconds();
+  M5.Rtc.SetTime(&RTC_TimeStruct); 
 }

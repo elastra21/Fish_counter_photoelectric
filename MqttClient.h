@@ -5,15 +5,19 @@
 
 class MqttClient {
   public:
-    bool isServiceAvailable();
+    void loop();
     void connect();
     void reconnect();
-    boolean isConnected();
-    void loop();
-    void sendTagData(const char*);
+    bool isConnected();
     PubSubClient getRef();
+    bool refreshMQTTStatus();
+    bool isServiceAvailable();
+    bool getConnectionStatus();
+    void sendTagData(const char*);
     void setCallback(std::function<void (char *, uint8_t *, unsigned int)> callback);
   private:
     bool no_service_available = true;
+    bool last_connection_state = false;
+
 };
 #endif
