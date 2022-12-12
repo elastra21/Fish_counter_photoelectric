@@ -8,16 +8,16 @@
 #include <ArduinoOTA.h>
 
 class WIFI {
-  public:
-    void localIP();
-    void loopOTA();
-    void setUpOTA();
-    void setUpWiFi();
-    void reconnect();
-    bool isConnected();
-    bool refreshWiFiStatus();
-    bool getConnectionStatus();
-  private:
-    bool last_connection_state = false;
+public:
+  void localIP();
+  void loopOTA();
+  void setUpOTA();
+  void setUpWiFi();
+  void reconnect();
+  bool isConnected();
+  bool refreshWiFiStatus();
+  bool getConnectionStatus();
+private:
+  bool last_connection_state = false;
 };
 #endif
