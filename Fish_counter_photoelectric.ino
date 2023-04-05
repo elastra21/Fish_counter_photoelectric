@@ -42,8 +42,6 @@ uint32_t jam_countdown = 0;
 bool flush_water_valve = 0;
 uint32_t next_avg_reset = 0;
 uint8_t buffer_position = 0;
-bool last_add_state = false;
-bool last_del_state = false;
 volatile bool is_up = false;
 volatile uint32_t duration = 1;
 volatile uint32_t end_time = 0;
@@ -55,6 +53,17 @@ uint32_t flush_water_valve_timer = 0;
 volatile bool should_update_count = false;
 volatile uint32_t on_working_water_valve_watchdog = 0;
 uint16_t time_buffer[BUFFER_SIZE] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+unsigned long last_add_DebounceTime = 0; // Initialize the last debounce time to 0
+unsigned long add_debounceDelay = 50;
+unsigned long last_del_DebounceTime = 0; // Initialize the last debounce time to 0
+unsigned long del_debounceDelay = 50;
+
+int add_state = false;
+bool last_add_state = false;
+int del_state = false;
+bool last_del_state = false;
+
 ////////////////////////////////
 
 void IRAM_ATTR handleInterrupt() {
@@ -109,11 +118,41 @@ void backgroundTasks(void* pvParameters) {
 void loop() {
   M5.Rtc.GetTime(&RTC_TimeStruct);
 
-  if (digitalRead(ADD_WORKER) == HIGH && !last_add_state) addWorker();
-  else if (digitalRead(ADD_WORKER) == LOW && last_add_state) last_add_state = !last_add_state;
+  // if (digitalRead(ADD_WORKER) == HIGH && !last_add_state) addWorker();
+  // else if (digitalRead(ADD_WORKER) == LOW && last_add_state) last_add_state = !last_add_state;
 
-  if (digitalRead(DEL_WORKER) == HIGH && !last_del_state) sustractWorker();
-  else if (digitalRead(DEL_WORKER) == LOW && last_del_state) last_del_state = !last_del_state;
+  int reading_add = digitalRead(ADD_WORKER);
+  int reading_del = digitalRead(DEL_WORKER);
+  
+  if (reading_add != last_add_state) {
+    last_add_DebounceTime = millis();
+  }
+  if ((millis() - last_add_DebounceTime) > add_debounceDelay) {
+    if (reading_add != add_state) {
+      add_state = reading_add;
+      if (add_state == HIGH) { // If the button is pressed
+        addWorker();
+      }
+    }
+  }
+  last_add_state = reading_add;
+
+  // if (digitalRead(DEL_WORKER) == HIGH && !last_del_state) sustractWorker();
+  // else if (digitalRead(DEL_WORKER) == LOW && last_del_state) last_del_state = !last_del_state;
+
+  if (reading_del != last_del_state) {
+    last_del_DebounceTime = millis();
+  }
+  if ((millis() - last_del_DebounceTime) > del_debounceDelay) {
+    if (reading_del != del_state) {
+      del_state = reading_del;
+      if (del_state == HIGH) { // If the button is pressed
+        sustractWorker();
+      }
+    }
+  }
+  last_del_state = reading_del;
+  
 
   if (wifi.refreshWiFiStatus()) screen.WiFiState(wifi.getConnectionStatus());
 
@@ -178,14 +217,14 @@ void addWorker(){
   if (worker_counter == MAX_WORKERS) return;
   worker_counter++;
   screen.WorkersState(worker_counter);
-  last_add_state = !last_add_state;
+  // last_add_state = !last_add_state;
 }
 
 void sustractWorker(){
   if (worker_counter == 0) return;
   worker_counter--;  
   screen.WorkersState(worker_counter);
-  last_del_state = !last_del_state;
+  // last_del_state = !last_del_state;
 }
 
 void resetJamTime() {
