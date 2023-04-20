@@ -1,6 +1,6 @@
 #include "utility/In_eSPI.h"
-#include <sys/_stdint.h>
-#include "M5Tough.h"
+// #include <sys/_stdint.h>
+#include <M5Tough.h>
 #include "Screen.h"
 
 void Screen::init() {

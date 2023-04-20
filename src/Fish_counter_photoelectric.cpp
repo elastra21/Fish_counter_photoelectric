@@ -5,7 +5,9 @@
 #include <WiFiUdp.h>
 #include <WiFiMulti.h>
 #include "MqttClient.h"
+#include <M5Tough.h>
 #include <NTPClient_Generic.h>  // Sí
+
 
 WIFI wifi;
 Screen screen;
@@ -29,6 +31,7 @@ void resetFlushTime();
 void resetOnWorkingWatchdog();
 void setFlushValve(bool value);
 void setOnWorkingValve(bool value);
+void updateCount(const uint16_t value);
 void backgroundTasks(void* pvParameters);
 void sendToMQTT(String count, String avg);
 void updateText(const uint16_t x, const uint16_t y, const char* text);
@@ -116,7 +119,9 @@ void backgroundTasks(void* pvParameters) {
 }
 
 void loop() {
+  // M5.Rtc.getDateTime(&RTC_TimeStruct);
   M5.Rtc.GetTime(&RTC_TimeStruct);
+  
 
   // if (digitalRead(ADD_WORKER) == HIGH && !last_add_state) addWorker();
   // else if (digitalRead(ADD_WORKER) == LOW && last_add_state) last_add_state = !last_add_state;
