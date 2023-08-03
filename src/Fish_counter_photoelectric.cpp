@@ -110,6 +110,7 @@ void backgroundTasks(void* pvParameters) {
   wifi.setUpWiFi();
   if (wifi.isConnected()) setUpRTC();
   wifi.setUpOTA();
+  wifi.setUpWebServer();
   mqtt.connect();
   for (;;) {
     wifi.isConnected() ? wifi.loopOTA() : wifi.reconnect();

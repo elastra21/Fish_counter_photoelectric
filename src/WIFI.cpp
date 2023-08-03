@@ -1,5 +1,59 @@
-#include "WiFiType.h"
 #include "WIFI.h"
+#include "WebSite.h"
+#include "WiFiType.h"
+
+AsyncWebServer server(80);
+
+static void handle_update_progress_cb(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+  if (!index){
+    int cmd = (filename.indexOf("spiffs") > -1) ? U_SPIFFS : U_FLASH;
+    // Update.runAsync(true);
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+      Update.printError(Serial);
+    }
+  }
+
+  if (Update.write(data, len) != len) {
+    Update.printError(Serial);
+  }
+
+  if (final) {
+    if (!Update.end(true)){
+      Update.printError(Serial);
+    }
+  }
+}
+
+void WIFI::setUpWebServer(){
+  /*use mdns for host name resolution*/
+  if (!MDNS.begin("el-fish-counter")){ // http://esp32.local
+    Serial.println("Error setting up MDNS responder!");
+    while (1){
+      delay(1000);
+    }
+  }
+  Serial.println("mDNS responder started Pinche Hugo");
+  /*return index page which is stored in serverIndex */
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200,"text/html", index_page);
+    // server.send(200, "text/html", loginIndex); 
+  });
+
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(200,"text/css", style);
+  });
+
+  server.on("/serverIndex", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200,"text/html", server_index);
+  });
+  /*handling uploading firmware file */
+  server.on("/update", HTTP_POST, []( AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+    ESP.restart(); 
+  },handle_update_progress_cb);
+
+  server.begin();
+}
 
 void WIFI::setUpWiFi() {
   WiFi.begin(SECRET_SSID, SECRET_PASS);
